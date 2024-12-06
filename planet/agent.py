@@ -64,11 +64,11 @@ class CEMAgent:
                 for t in range(self.horizon):
                     total_predicted_reward += self.reward_model(
                         state=state,
-                        action=action_candidates[t],
+                        action=torch.tanh(action_candidates[t]),
                         rnn_hidden=rnn_hidden,
                     ).squeeze()
                     next_state_prior, rnn_hidden = self.rssm.prior(
-                        state, action_candidates[t], rnn_hidden
+                        state, torch.tanh(action_candidates[t]), rnn_hidden
                     )
                     # Since we are passing a batch, output dustribution has the right shape
                     # So no need to specify the dimensions for sampling!
@@ -86,29 +86,16 @@ class CEMAgent:
                 action_dist = Normal(mean, stddev)
     
             # Return only the first action (Model Predictive Control)
-            action = mean[0]
-
-            # Estimate reward
-            estimated_reward = self.reward_model(
-                state=state_posterior.sample(),
-                action=action.unsqueeze(0),
-                rnn_hidden=self.rnn_hidden,
-            )
+            action = torch.tanh(mean[0])
     
             # Update RNN hidden state for next step planning
             _, self.rnn_hidden = self.rssm.prior(
                 state_posterior.sample(),
-                action.unsqueeze(0),
+                torch.tanh(action.unsqueeze(0)),
                 self.rnn_hidden
             )
 
-        info = {
-            "state_posterior_mean": state_posterior.loc,
-            "state_posterior_cov": state_posterior.scale,
-            "estimated_reward": estimated_reward,
-        }
-
-        return action.cpu().numpy(), info
+        return action.cpu().numpy()
 
     def reset(self):
         self.rnn_hidden = torch.zeros(

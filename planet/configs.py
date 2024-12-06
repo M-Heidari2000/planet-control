@@ -34,7 +34,7 @@ class TrainConfig:
 class TestConfig:
     model_dir: str
     render: bool = False
-    action_repeat: int = 4
+    action_repeat: int = 1
     episodes: int = 1
     horizon: int = 12
     N_iterations: int = 10
