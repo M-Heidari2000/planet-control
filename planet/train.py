@@ -235,7 +235,7 @@ def train(env: gym.Env, config: TrainConfig):
             done = False
             total_reward = 0
             while not done:
-                action, _ = cem_agent(obs)
+                action = cem_agent(obs)
                 obs, reward, done, _ = env.step(action)
                 total_reward += reward
 
