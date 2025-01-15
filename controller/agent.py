@@ -111,7 +111,7 @@ class CEMAgent:
 
 class RSAgent:
     """
-        Action planning by Cross Entropy Method (CEM)
+        Action planning by Random Shooting method
     """
     def __init__(
         self,
