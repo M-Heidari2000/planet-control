@@ -106,7 +106,7 @@ class CEMAgent:
         return actions.cpu().numpy(), best_trajectory.cpu().numpy()
 
     def reset(self):
-        self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
+        self.rnn_hidden = torch.zeros(1, self.rssm.rnn_hidden_dim, device=self.device)
 
 
 class RSAgent:
@@ -119,14 +119,12 @@ class RSAgent:
         reward_model,
         observation_model,
         planning_horizon,
-        num_iterations: int,
         num_candidates: int,
     ):
         self.rssm = rssm
         self.reward_model = reward_model
         self.observation_model = observation_model
 
-        self.num_iterations = num_iterations
         self.num_candidates = num_candidates
         self.planning_horizon = planning_horizon
 
@@ -195,6 +193,6 @@ class RSAgent:
         return actions.cpu().numpy(), best_trajectory.cpu().numpy()
 
     def reset(self):
-        self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
+        self.rnn_hidden = torch.zeros(1, self.rssm.rnn_hidden_dim, device=self.device)
 
 

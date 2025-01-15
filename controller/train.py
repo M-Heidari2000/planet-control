@@ -13,7 +13,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.tensorboard import SummaryWriter
 from .agent import CEMAgent, RSAgent
 from .utils import ReplayBuffer
-from .wrappers import RepeatAction
+from .wrappers import RepeatActionWrapper
 from .configs import TrainConfig
 from .models import (
     RecurrentStateSpaceModel,
@@ -36,7 +36,7 @@ def train(env: gym.Env, config: TrainConfig):
     if torch.cuda.is_available():
         torch.cuda.manual_seed(config.seed)
 
-    env = RepeatAction(env, skip=config.action_repeat)
+    env = RepeatActionWrapper(env, skip=config.action_repeat)
 
     # define replay buffer
     replay_buffer = ReplayBuffer(
@@ -52,7 +52,7 @@ def train(env: gym.Env, config: TrainConfig):
         state_dim=config.state_dim,
         action_dim=env.action_space.shape[0],
         rnn_hidden_dim=config.rnn_hidden_dim,
-        obs_embedding_dim=config.obs_embedding_dim,
+        observation_dim=env.observation_space.shape[0],
     ).to(device)
 
     observation_model = ObservationModel(
@@ -64,7 +64,6 @@ def train(env: gym.Env, config: TrainConfig):
     reward_model = RewardModel(
         state_dim=config.state_dim,
         rnn_hidden_dim=config.rnn_hidden_dim,
-        action_dim=env.action_space.shape[0],
     ).to(device)
 
     all_params = (
