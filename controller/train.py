@@ -219,7 +219,7 @@ def train(env: gym.Env, config: TrainConfig):
             total_reward = 0
             agent.reset()
             while not done:
-                actions, _ = agent(obs=obs)
+                actions, _ = agent(obs=obs, exploration_noise_var=0)
                 action = actions[0]
                 next_obs, reward, terminated, truncated, _ = env.step(action)
                 total_reward += reward
