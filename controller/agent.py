@@ -141,8 +141,8 @@ class RSAgent:
             state_posterior = self.rssm.posterior(self.rnn_hidden, obs)
 
             action_dist = Uniform(
-                low=-torch.ones((self.planning_horizon, self.posterior_model.action_dim), device=self.device),
-                high=torch.ones((self.planning_horizon, self.posterior_model.action_dim),device=self.device),
+                low=-torch.ones((self.planning_horizon, self.rssm.action_dim), device=self.device),
+                high=torch.ones((self.planning_horizon, self.rssm.action_dim),device=self.device),
             )
     
             action_candidates = action_dist.sample([self.N_candidates])
