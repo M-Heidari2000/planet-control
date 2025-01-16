@@ -52,6 +52,7 @@ def train(env: gym.Env, config: TrainConfig):
         state_dim=config.state_dim,
         action_dim=env.action_space.shape[0],
         rnn_hidden_dim=config.rnn_hidden_dim,
+        hidden_dim=config.hidden_dim,
         observation_dim=env.observation_space.shape[0],
     ).to(device)
 
@@ -142,8 +143,8 @@ def train(env: gym.Env, config: TrainConfig):
             rewards = torch.as_tensor(rewards, device=device)
             rewards = einops.rearrange(rewards, 'b l r -> l b r')
 
-            # prepare Tensor to maintain states sequence and rnn hidden states sequence
-            states = torch.zeros(
+            # prepare Tensor to maintain posterior samples sequence and rnn hidden states sequence
+            posterior_samples = torch.zeros(
                 (config.chunk_length, config.batch_size, config.state_dim),
                 device=device
             )
@@ -153,11 +154,25 @@ def train(env: gym.Env, config: TrainConfig):
             )
 
             # initialize state and rnn hidden state with 0 vector
-            state = torch.zeros(config.batch_size, config.state_dim, device=device)
             rnn_hidden = torch.zeros(config.batch_size, config.rnn_hidden_dim, device=device)
 
             # compute state and rnn hidden sequences and kl loss
+            # first step D_kl(q(s1|o1) || p(s1))
+            first_state_prior = torch.distributions.Normal(
+                torch.zeros((config.batch_size, config.state_dim), device=device),
+                torch.ones((config.batch_size, config.state_dim), device=device),
+            )
+            first_state_posterior = rssm.posterior(
+                rnn_hidden=rnn_hidden,
+                obs=observations[0],
+            )
+            state = first_state_posterior.rsample()
+            posterior_samples[0] = state
+
             kl_loss = 0
+            kl = kl_divergence(first_state_posterior, first_state_prior).sum(dim=1)
+            kl_loss += kl.clamp(min=config.free_nats).mean()            
+
             for l in range(config.chunk_length-1):
                 next_state_prior, next_state_posterior, rnn_hidden = rssm(
                     state=state,
@@ -166,14 +181,14 @@ def train(env: gym.Env, config: TrainConfig):
                     next_obs=observations[l+1]
                 )
                 state = next_state_posterior.rsample()
-                states[l+1] = state
+                posterior_samples[l+1] = state
                 rnn_hiddens[l+1] = rnn_hidden
-                kl = kl_divergence(next_state_prior, next_state_posterior).sum(dim=1)
+                kl = kl_divergence(next_state_posterior, next_state_prior).sum(dim=1)
                 kl_loss += kl.clamp(min=config.free_nats).mean()
-            kl_loss /= (config.chunk_length - 1)
+            kl_loss /= config.chunk_length
 
             # compute reconstructed observations and predicted rewards
-            flatten_states = states.reshape(-1, config.state_dim)
+            flatten_states = posterior_samples.reshape(-1, config.state_dim)
             flatten_rnn_hiddens = rnn_hiddens.reshape(-1, config.rnn_hidden_dim)
             recon_observations = observation_model(
                 state=flatten_states,
@@ -187,11 +202,11 @@ def train(env: gym.Env, config: TrainConfig):
             # compute loss for observation and reward
             # Since the variance of these models are I, MLE is equivalent to MSE
             obs_loss = 0.5 * mse_loss(
-                recon_observations[1:],
-                observations[1:],
+                recon_observations,
+                observations,
                 reduction='none'
             ).mean([0, 1]).sum()
-            reward_loss = 0.5 * mse_loss(predicted_rewards[1:], rewards[1:])
+            reward_loss = 0.5 * mse_loss(predicted_rewards, rewards)
 
             # add all losses and update model parameters with gradient descent
             loss = kl_loss + obs_loss + reward_loss

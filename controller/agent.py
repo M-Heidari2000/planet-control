@@ -1,3 +1,4 @@
+import math
 import torch
 import einops
 from torch.distributions import Normal, Uniform
@@ -40,35 +41,34 @@ class CEMAgent:
 
             # Initialize action distribution ~ N(0, I)
             action_dist = Normal(
-                torch.zeros((self.horizon, self.rssm.action_dim), device=self.device),
-                torch.ones((self.horizon, self.rssm.action_dim), device=self.device),
+                torch.zeros((self.planning_horizon, self.rssm.action_dim), device=self.device),
+                torch.ones((self.planning_horizon, self.rssm.action_dim), device=self.device),
             )
-    
+
             # Iteratively improve action distribution with CEM
-            for _ in range(self.N_iterations):
+            for _ in range(self.num_iterations):
                 # Sample action candidates
-                # transpose to (horizon, N_candidates, action_dim) for parallel exploration
-                action_candidates = action_dist.sample([self.N_candidates])
+                # transpose to (horizon, num_candidates, action_dim) for parallel exploration
+                action_candidates = action_dist.sample([self.num_candidates])
                 action_candidates = einops.rearrange(action_candidates, 'n h a -> h n a')
     
                 # Initialize reward, state, and rnn hidden state
-                # The size of state is (self.N_acndidates, state_dim)
-                # The size of rnn hidden is (self.N_candidates, rnn_hidden_dim)
+                # The size of state is (self.num_candidates, state_dim)
+                # The size of rnn hidden is (self.num_candidates, rnn_hidden_dim)
                 # These are for parallel exploration
-                state = state_posterior.sample([self.N_candidates]).squeeze(-2)
-                rnn_hidden = self.rnn_hidden.repeat([self.N_candidates, 1])
-                total_predicted_reward = torch.zeros(self.N_candidates, device=self.device)
+                state = state_posterior.sample([self.num_candidates]).squeeze(-2)
+                rnn_hidden = self.rnn_hidden.repeat([self.num_candidates, 1])
+                total_predicted_reward = torch.zeros(self.num_candidates, device=self.device)
                 observation_trajectories = torch.zeros(
                     (self.planning_horizon, self.num_candidates, obs.shape[1]),
                     device=self.device,
                 )
 
                 # Compute total predicted reward by open-loop prediction using prior
-                for t in range(self.horizon):
-                    observation_trajectories[t] = self.observation_model(state=state)
+                for t in range(self.planning_horizon):
+                    observation_trajectories[t] = self.observation_model(state=state, rnn_hidden=rnn_hidden)
                     total_predicted_reward += self.reward_model(
                         state=state,
-                        action=torch.tanh(action_candidates[t]),
                         rnn_hidden=rnn_hidden,
                     ).squeeze()
                     next_state_prior, rnn_hidden = self.rssm.prior(
@@ -93,16 +93,16 @@ class CEMAgent:
             # Return only the first action (Model Predictive Control)
             actions = torch.tanh(mean)
             if exploration_noise_var > 0:
-                actions += torch.randn_like(actions) * torch.sqrt(exploration_noise_var)
+                actions += torch.randn_like(actions) * math.sqrt(exploration_noise_var)
             best_trajectory = observation_trajectories[:, elite_indexes, :].mean(dim=1)
 
             # Update RNN hidden state for next step planning
             _, self.rnn_hidden = self.rssm.prior(
                 state_posterior.sample(),
-                torch.tanh(actions.unsqueeze(0)),
+                torch.tanh(actions[0]).unsqueeze(0),
                 self.rnn_hidden
             )
-
+        
         return actions.cpu().numpy(), best_trajectory.cpu().numpy()
 
     def reset(self):
@@ -145,24 +145,22 @@ class RSAgent:
                 high=torch.ones((self.planning_horizon, self.rssm.action_dim),device=self.device),
             )
     
-            action_candidates = action_dist.sample([self.N_candidates])
+            action_candidates = action_dist.sample([self.num_candidates])
             action_candidates = einops.rearrange(action_candidates, 'n h a -> h n a')
 
-
-            state = state_posterior.sample([self.N_candidates]).squeeze(-2)
-            rnn_hidden = self.rnn_hidden.repeat([self.N_candidates, 1])
-            total_predicted_reward = torch.zeros(self.N_candidates, device=self.device)
+            state = state_posterior.sample([self.num_candidates]).squeeze(-2)
+            rnn_hidden = self.rnn_hidden.repeat([self.num_candidates, 1])
+            total_predicted_reward = torch.zeros(self.num_candidates, device=self.device)
             observation_trajectories = torch.zeros(
                 (self.planning_horizon, self.num_candidates, obs.shape[1]),
                 device=self.device,
             )
 
             # Compute total predicted reward by open-loop prediction using prior
-            for t in range(self.horizon):
-                observation_trajectories[t] = self.observation_model(state=state)
+            for t in range(self.planning_horizon):
+                observation_trajectories[t] = self.observation_model(state=state, rnn_hidden=rnn_hidden)
                 total_predicted_reward += self.reward_model(
                     state=state,
-                    action=action_candidates[t],
                     rnn_hidden=rnn_hidden,
                 ).squeeze()
                 next_state_prior, rnn_hidden = self.rssm.prior(
@@ -180,13 +178,13 @@ class RSAgent:
             best_trajectory = observation_trajectories[:, max_index, :]
     
             if exploration_noise_var > 0:
-                actions += torch.randn_like(actions) * torch.sqrt(exploration_noise_var)
+                actions += torch.randn_like(actions) * math.sqrt(exploration_noise_var)
             best_trajectory = observation_trajectories[:, max_index, :]
 
             # Update RNN hidden state for next step planning
             _, self.rnn_hidden = self.rssm.prior(
                 state_posterior.sample(),
-                actions[0],
+                actions[0].unsqueeze(0),
                 self.rnn_hidden
             )
 
