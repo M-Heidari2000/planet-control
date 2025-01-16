@@ -99,7 +99,7 @@ class RecurrentStateSpaceModel(nn.Module):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.rnn_hidden_dim = rnn_hidden_dim
-        self.hidden_dim = rnn_hidden_dim
+        self.hidden_dim = hidden_dim
         self._min_stddev = min_stddev
         self.observation_dim = observation_dim
 
@@ -167,5 +167,5 @@ class RecurrentStateSpaceModel(nn.Module):
             for model training
         """
         next_state_prior, next_rnn_hidden = self.prior(state, action, rnn_hidden)
-        next_state_posterior = self.posterior(rnn_hidden, next_obs)
+        next_state_posterior = self.posterior(next_rnn_hidden, next_obs)
         return next_state_prior, next_state_posterior, next_rnn_hidden

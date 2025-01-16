@@ -116,7 +116,6 @@ def train(env: gym.Env, config: TrainConfig):
         while not done:
             actions, _ = agent(obs=obs, exploration_noise_var=config.action_noise_var)
             action = actions[0]
-            action.clip(min=env.action_space.low, max=env.action_space.high)
             next_obs, reward, terminated, truncated, _ = env.step(action)
             total_reward += reward
             done = terminated or truncated
@@ -229,6 +228,7 @@ def train(env: gym.Env, config: TrainConfig):
 
         # test without exploration noise
         if (episode + 1) % config.test_interval == 0:
+            start = time.time()
             obs, _ = env.reset()
             done = False
             total_reward = 0

@@ -87,19 +87,20 @@ class CEMAgent:
                 # fit a new distribution to the elites
                 mean = elites.mean(dim=1)
                 std = elites.std(dim=1, unbiased=False)
-                action_dist.loc = mean
-                action_dist.scale = std
+                action_dist = Normal(mean, std)
     
             # Return only the first action (Model Predictive Control)
             actions = torch.tanh(mean)
             if exploration_noise_var > 0:
                 actions += torch.randn_like(actions) * math.sqrt(exploration_noise_var)
+            actions = actions.clamp(min=-1, max=1)
+
             best_trajectory = observation_trajectories[:, elite_indexes, :].mean(dim=1)
 
             # Update RNN hidden state for next step planning
             _, self.rnn_hidden = self.rssm.prior(
                 state_posterior.sample(),
-                torch.tanh(actions[0]).unsqueeze(0),
+                actions[0].unsqueeze(0),
                 self.rnn_hidden
             )
         
@@ -179,7 +180,7 @@ class RSAgent:
     
             if exploration_noise_var > 0:
                 actions += torch.randn_like(actions) * math.sqrt(exploration_noise_var)
-            best_trajectory = observation_trajectories[:, max_index, :]
+            actions = actions.clamp(min=-1, max=1)
 
             # Update RNN hidden state for next step planning
             _, self.rnn_hidden = self.rssm.prior(
