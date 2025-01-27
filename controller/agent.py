@@ -180,7 +180,7 @@ class RSAgent:
     
             if exploration_noise_var > 0:
                 actions += torch.randn_like(actions) * math.sqrt(exploration_noise_var)
-            actions = actions.clamp(min=-1, max=1)
+            actions = actions.clamp(min=-1.0, max=1.0)
 
             # Update RNN hidden state for next step planning
             _, self.rnn_hidden = self.rssm.prior(
